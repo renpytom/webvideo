@@ -7,6 +7,10 @@ init -100 python:
 // video element is active.
 let video;
 
+// This stores an element that is prompting the player to touch the screen
+// to play the video.
+let videoPrompt;
+
 /**
  * Plays a video. This should be called with an object that has the
  * following fields:
@@ -15,9 +19,37 @@ let video;
  * `loop` - True to loop, False not to loop.
  */
 
+videoPlayPrompt = (message) => {
+    videoPlayPromptHide();
+
+    videoPrompt = document.createElement("div");
+    videoPrompt.append(message);
+
+    videoPrompt.style.position = "absolute";
+    videoPrompt.style.bottom = "50%";
+    videoPrompt.style.width = "100%";
+    videoPrompt.style.textAlign = "center";
+
+    videoPrompt.style.font = "24px sans-serif";
+    videoPrompt.style.color = "white";
+    videoPrompt.style.textAlign = "center";
+    videoPrompt.style.textShadow = "0 0 2px black";
+
+    document.body.append(videoPrompt);
+};
+
+videoPlayPromptHide = () => {
+    if (videoPrompt) {
+        videoPrompt.remove();
+    }
+
+    videoPrompt = null;
+};
+
+
 videoPlay = (properties) => {
     video = document.createElement("video");
-    video.setAttribute("autoplay", "true");
+    video.setAttribute("playsinline", "true");
 
     if (properties.loop) {
         video.setAttribute("loop", "true");
@@ -34,8 +66,6 @@ videoPlay = (properties) => {
     video.style.width = "100%";
     video.style.height = "100%";
 
-    video.style.pointerEvents = "none";
-
     for (let i of properties.sources) {
         console.log("Video source: " + i);
 
@@ -45,6 +75,27 @@ videoPlay = (properties) => {
     }
 
     document.body.append(video);
+
+    let unblockVideo = () => {
+        if (video) {
+            video.style.pointerEvents = "none";
+        }
+    };
+
+    video.play().then(() => {
+        setTimeout(unblockVideo, 1000);
+    }).catch( (e) => {
+        console.log("Video rejected: " + e);
+        videoPlayPrompt(properties.prompt);
+        video.style.pointerEvents = "auto";
+
+        video.addEventListener("click", () => {
+            console.log("Video click!");
+            videoPlayPromptHide();
+            setTimeout(unblockVideo, 1000);
+            video.play();
+        });
+    });
 };
 
 /**
@@ -56,6 +107,8 @@ videoStop = () => {
     }
 
     video = undefined;
+
+    videoPlayPromptHide();
 };
 
 /**
@@ -93,6 +146,8 @@ isVideoPlaying = () => {
 
         web_video_base = "."
 
+        web_video_prompt = "Touch to play the video."
+
         def movie_cutscene(filename, delay=None, loops=0, stop_music=True):
             """
             A replacement for renpy.movie_cutscene that plays a video in
@@ -124,6 +179,8 @@ isVideoPlaying = () => {
             # Determine the filename, and if different, the alternative filename.
             properties["sources"] = [ web_video_base + "/" + filename ]
 
+            properties["prompt"] = __(web_video_prompt)
+
             alt_filename = filename.rpartition(".")[0] + ".mp4"
             if alt_filename != filename:
                 properties["sources"].append( web_video_base + "/" + alt_filename )
@@ -137,8 +194,9 @@ isVideoPlaying = () => {
 
                 emscripten.run_script("""videoPlay({})""".format(json_properties))
 
-                ui.add(WebVideoBehavior())
+                renpy.show_screen("webvideo_blackout", _transient=True)
 
+                ui.add(WebVideoBehavior())
                 return renpy.pause()
 
             finally:
@@ -148,3 +206,8 @@ isVideoPlaying = () => {
                     renpy.music.set_pause(False, channel="music")
 
         renpy.movie_cutscene = movie_cutscene
+
+
+screen webvideo_blackout():
+    zorder 1000
+    add "#000"
